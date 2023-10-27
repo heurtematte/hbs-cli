@@ -5,12 +5,11 @@ import minimist from 'minimist';
 import glob from 'glob-promise';
 import packageJson from '../package.json';
 import resolveNode from 'resolve';
-import { readFile, writeFile } from 'fs-promise';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import merge from 'lodash.merge';
-import mkdirp from 'mkdirp-then';
-import getStdin from 'get-stdin';
+
 const debug = require('debug')('hbs');
-function resolve(file, options) {
+function resolve(file:string, options:any) {
   return new Promise((resolvePromise, reject) => resolveNode(file, options, (error, path) => {
     if (error) {
       reject(error);
@@ -19,7 +18,7 @@ function resolve(file, options) {
     }
   }));
 }
-export async function resolveModuleOrGlob(path, cwd = process.cwd()) {
+export async function resolveModuleOrGlob(path:string, cwd = process.cwd()) {
   try {
     debug(`Trying to require ${path} as a node_module`);
     return [ await resolve(path, { basedir: cwd }) ];
@@ -29,7 +28,7 @@ export async function resolveModuleOrGlob(path, cwd = process.cwd()) {
   }
 }
 
-export async function expandGlobList(globs) {
+export async function expandGlobList(globs:any) {
   if (typeof globs === 'string') {
     globs = [ globs ];
   }
@@ -37,11 +36,11 @@ export async function expandGlobList(globs) {
     throw new Error(`expandGlobList expects Array or String, given ${typeof globs}`);
   }
   return (await Promise.all(
-    globs.map((path) => resolveModuleOrGlob(path))
+    globs.map((path:string) => resolveModuleOrGlob(path))
   )).reduce((total, current) => total.concat(current), []);
 }
 
-export function addHandlebarsHelpers(files) {
+export function addHandlebarsHelpers(files:[string]) {
   files.forEach((file) => {
     debug(`Requiring ${file}`);
     const handlebarsHelper = require(file); // eslint-disable-line global-require
@@ -54,22 +53,22 @@ export function addHandlebarsHelpers(files) {
   });
 }
 
-export async function addHandlebarsPartials(files) {
+export async function addHandlebarsPartials(files:[string]) {
   await Promise.all(files.map(async function registerPartial(file) {
     debug(`Registering partial ${file}`);
-    Handlebars.registerPartial(basename(file, extname(file)), await readFile(file, 'utf8'));
+    Handlebars.registerPartial(basename(file, extname(file)), await readFile(file, { encoding: 'utf8' }));
   }));
 }
 
-export async function addObjectsToData(objects) {
+export async function addObjectsToData(objects:any) {
   if (typeof objects === 'string') {
     objects = [ objects ];
   }
   if (Array.isArray(objects) === false) {
     throw new Error(`addObjectsToData expects Array or String, given ${typeof objects}`);
   }
-  const dataSets = [];
-  const files = await expandGlobList(objects.filter((object) => {
+  const dataSets:any = [];
+  const files = await expandGlobList(objects.filter((object:any) => {
     try {
       debug(`Attempting to parse ${object} as JSON`);
       dataSets.push(JSON.parse(object));
@@ -79,16 +78,38 @@ export async function addObjectsToData(objects) {
     }
   }));
   const fileContents = await Promise.all(
-    files.map(async function registerPartial(file) {
+    files.map(async function registerPartial(file:string) {
       debug(`Loading JSON file ${file}`);
-      return JSON.parse(await readFile(file, 'utf8'));
+      return JSON.parse(await readFile(file, { encoding: 'utf8' }));
     })
   );
   return merge({}, ...dataSets.concat(fileContents));
 }
 
+// https://gist.github.com/miguelmota/4cdaa19a78f5684caa5146d93bdc57c1
+async function readStdinSync():Promise<string> {
+  return new Promise(resolve => {
+    let data = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.resume()
+    const t = setTimeout(() => {
+      process.stdin.pause()
+      resolve(data)
+    }, 1e3)
+    process.stdin.on('readable', () => {
+      let chunk
+      while ((chunk = process.stdin.read())) {
+        data += chunk
+      }
+    }).on('end', () => {
+      clearTimeout(t)
+      resolve(data)
+    })
+  })
+}
+
 export async function getStdinData() {
-  const text = await getStdin();
+  const text = await readStdinSync();
   try {
     debug(`Attempting to parse ${text} as JSON`);
     return JSON.parse(text);
@@ -98,17 +119,17 @@ export async function getStdinData() {
 }
 
 export async function renderHandlebarsTemplate(
-  files, outputDirectory = process.cwd(),
+  files:[string], outputDirectory = process.cwd(),
   outputExtension = 'html', data = {}, stdout = false) {
   await Promise.all(files.map(async function renderTemplate(file) {
     debug(`Rendering template ${file} with data`, data);
     const path = resolvePath(outputDirectory, `${basename(file, extname(file))}.${outputExtension}`);
-    const htmlContents = Handlebars.compile(await readFile(file, 'utf8'))(data);
+    const htmlContents = Handlebars.compile(await readFile(file, { encoding: 'utf8' }))(data);
     if (stdout) {
       await process.stdout.write(htmlContents, 'utf8');
     } else {
-      await mkdirp(outputDirectory);
-      await writeFile(path, htmlContents, 'utf8');
+      await mkdir(outputDirectory, { recursive: true });
+      await writeFile(path, htmlContents);
       debug(`Wrote ${path}`);
       console.error(`Wrote ${path} from ${file}`);
     }

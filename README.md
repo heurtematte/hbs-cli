@@ -72,3 +72,13 @@ To compile this template you may run this command:
 ```bash
 hbs --helper ./src/template_helper/**/*.js --data src/data.json src/templates/**/*.hbs --output dist/
 ```
+
+# dev
+
+```shell
+docker build . -t hbs-cli
+```
+
+```shell
+docker run -u $(id -u):$(id -g) -v $PWD:/app/ --entrypoint="bash" -it hbs-cli
+```
