@@ -28,7 +28,7 @@ export async function resolveModuleOrGlob(path:string, cwd = process.cwd()) {
   }
 }
 
-export async function expandGlobList(globs:any) {
+export async function expandGlobList(globs:any): Promise<[string]> {
   if (typeof globs === 'string') {
     globs = [ globs ];
   }
@@ -37,7 +37,7 @@ export async function expandGlobList(globs:any) {
   }
   return (await Promise.all(
     globs.map((path:string) => resolveModuleOrGlob(path))
-  )).reduce((total, current) => total.concat(current), []);
+  )).reduce((total, current) => total.concat(current), []) as [string];
 }
 
 export function addHandlebarsHelpers(files:[string]) {
@@ -78,7 +78,7 @@ export async function addObjectsToData(objects:any) {
     }
   }));
   const fileContents = await Promise.all(
-    files.map(async function registerPartial(file:string) {
+    files.map(async function registerPartial(file:string): Promise<string> {
       debug(`Loading JSON file ${file}`);
       return JSON.parse(await readFile(file, { encoding: 'utf8' }));
     })
